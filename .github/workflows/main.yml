@@ -4,20 +4,32 @@ on:
   workflow_dispatch:
     inputs:
       pages:
-        description: "How many e-Qazyna pages to parse"
+        description: "Сколько первых страниц реестра проверить"
         required: true
         default: "5"
-      no_egov:
-        description: "Disable eGov enrichment"
+      doc_type:
+        description: "Тип документа"
         required: true
-        default: "false"
+        default: "Заявка на разведку ТПИ"
+      statuses:
+        description: "Статусы через запятую"
+        required: true
+        default: "Отправлено на рассмотрение,Принято"
+      no_egov:
+        description: "Отключить обогащение eGov"
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: eqazyna-export
+  cancel-in-progress: true
 
 jobs:
   export:
     runs-on: ubuntu-latest
-
-    env:
-      EGOV_API_KEY: ${{ secrets.EGOV_API_KEY }}
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -33,16 +45,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run export
+      - name: Build XLSX export
+        env:
+          EGOV_API_KEY: ${{ secrets.EGOV_API_KEY }}
+          DOC_TYPE: ${{ inputs.doc_type }}
+          STATUSES: ${{ inputs.statuses }}
         run: |
-          if [ "${{ github.event.inputs.no_egov }}" = "true" ]; then
-            python -m eqazyna_export.main --pages "${{ github.event.inputs.pages }}" --no-egov
-          else
-            python -m eqazyna_export.main --pages "${{ github.event.inputs.pages }}"
-          fi
+          FLAGS=""
+          if [ "${{ inputs.no_egov }}" = "true" ]; then FLAGS="$FLAGS --no-egov"; fi
+          python -m eqazyna_export.main \
+            --pages "${{ inputs.pages }}" \
+            --doc-type "$DOC_TYPE" \
+            --statuses "$STATUSES" \
+            --out "exports/eqazyna_export.xlsx" \
+            $FLAGS
+          ls -lah exports
 
-      - name: Upload Excel artifact
+      - name: Upload XLSX artifact
         uses: actions/upload-artifact@v4
         with:
           name: eqazyna-xlsx-export
           path: exports/*.xlsx
+          if-no-files-found: error
+          retention-days: 14
