@@ -1,0 +1,48 @@
+name: Export e-Qazyna XLSX
+
+on:
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: "How many e-Qazyna pages to parse"
+        required: true
+        default: "5"
+      no_egov:
+        description: "Disable eGov enrichment"
+        required: true
+        default: "false"
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+
+    env:
+      EGOV_API_KEY: ${{ secrets.EGOV_API_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run export
+        run: |
+          if [ "${{ github.event.inputs.no_egov }}" = "true" ]; then
+            python -m eqazyna_export.main --pages "${{ github.event.inputs.pages }}" --no-egov
+          else
+            python -m eqazyna_export.main --pages "${{ github.event.inputs.pages }}"
+          fi
+
+      - name: Upload Excel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eqazyna-xlsx-export
+          path: exports/*.xlsx
